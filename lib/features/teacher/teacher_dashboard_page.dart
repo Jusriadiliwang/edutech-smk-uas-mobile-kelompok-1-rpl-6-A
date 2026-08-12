@@ -879,9 +879,9 @@ class _StatistikTab extends StatelessWidget {
           // Rekap Absensi
           const Text('Rekap Absensi Kelas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
-                .where('teacher_id', isEqualTo: uid).snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
+                .where('teacher_id', isEqualTo: uid).get(),
             builder: (_, snap) {
               final docs = snap.data?.docs ?? [];
               final hadir = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
@@ -955,9 +955,9 @@ class _StatistikTab extends StatelessWidget {
                             style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                       ])),
                       // Lihat jawaban siswa
-                      StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
-                            .where('quiz_id', isEqualTo: d.id).snapshots(),
+                      FutureBuilder<QuerySnapshot>(
+                        future: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
+                            .where('quiz_id', isEqualTo: d.id).get(),
                         builder: (_, aSnap) {
                           final count = aSnap.data?.docs.length ?? 0;
                           return StatusBadge(label: '$count siswa', color: AppTheme.primary);

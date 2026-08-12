@@ -31,16 +31,14 @@ class CaseTrackingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Tracking Kasus BK')),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
+      body: FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
             .where('bk_id', isEqualTo: bkId)
-            .snapshots(),
+            .get(),
         builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
 
           final allDocs = snap.data!.docs
             ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)

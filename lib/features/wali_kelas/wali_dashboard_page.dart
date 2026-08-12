@@ -336,15 +336,15 @@ class _AbsensiTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
           .collection(FirebaseConstants.absences)
           .where('class', isEqualTo: kelas)
           .limit(100)
-          .snapshots(),
+          .get(),
       builder: (_, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snap.data!.docs
           ..sort((a, b) => (((b.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
               .compareTo(((a.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));

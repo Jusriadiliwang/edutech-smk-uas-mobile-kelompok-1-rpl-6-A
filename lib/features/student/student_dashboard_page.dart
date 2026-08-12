@@ -345,20 +345,26 @@ class _HomeTab extends StatelessWidget {
 }
 
 // ─── MATERI TAB ───
-class _MateriTab extends StatelessWidget {
+class _MateriTab extends StatefulWidget {
   final String kelas;
   const _MateriTab({required this.kelas});
+  @override State<_MateriTab> createState() => _MateriTabState();
+}
+class _MateriTabState extends State<_MateriTab> {
+  late Future<QuerySnapshot> _f;
+  @override void initState() { super.initState(); _load(); }
+  void _load() => _f = FirebaseFirestore.instance
+      .collection(FirebaseConstants.materials)
+      .where('class', isEqualTo: widget.kelas).get();
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.materials)
-          .where('class', isEqualTo: kelas)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (context, snap) {
-        if (snap.hasError) return _errWidget('Gagal memuat materi');
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return _retryWidget('Gagal memuat materi', () => setState(_load));
         final docs = snap.data!.docs
           ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
@@ -421,20 +427,26 @@ class _MateriTab extends StatelessWidget {
 }
 
 // ─── TUGAS TAB ───
-class _TugasTab extends StatelessWidget {
+class _TugasTab extends StatefulWidget {
   final String uid, kelas;
   const _TugasTab({required this.uid, required this.kelas});
+  @override State<_TugasTab> createState() => _TugasTabState();
+}
+class _TugasTabState extends State<_TugasTab> {
+  late Future<QuerySnapshot> _f;
+  @override void initState() { super.initState(); _load(); }
+  void _load() => _f = FirebaseFirestore.instance
+      .collection(FirebaseConstants.assignments)
+      .where('class', isEqualTo: widget.kelas).get();
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.assignments)
-          .where('class', isEqualTo: kelas)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (context, snap) {
-        if (snap.hasError) return _errWidget('Gagal memuat tugas');
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return _retryWidget('Gagal memuat tugas', () => setState(_load));
         final docs = snap.data!.docs
           ..sort((a, b) {
             final ta = (a.data() as Map)['deadline'] as Timestamp?;
@@ -463,7 +475,7 @@ class _TugasTab extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => AssignmentViewPage(
                     assignmentId: docs[i].id,
                     assignmentData: data,
-                    studentId: uid,
+                     studentId: widget.uid,
                   ))),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -536,17 +548,18 @@ class _JadwalTab extends StatelessWidget {
           ),
           Expanded(
             child: TabBarView(
-              children: _days.map((day) => StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
+              children: _days.map((day) => FutureBuilder<QuerySnapshot>(
+                future: FirebaseFirestore.instance
                     .collection(FirebaseConstants.schedules)
                     .where('class', isEqualTo: kelas)
                     .where('day', isEqualTo: day)
-                    .snapshots(),
+                    .get(),
                 builder: (_, snap) {
-                  if (snap.hasError) return Center(child: Text('Error', style: const TextStyle(color: AppTheme.danger)));
-                  if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                  if (snap.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator());
+                  if (snap.hasError) return Center(child: Text('${snap.error}', style: const TextStyle(color: AppTheme.danger)));
                   final docs = snap.data!.docs
-                    ..sort((a, b) => ((a.data() as Map)['start_time'] as String? ?? '')
+                    ..sort((a,b) => ((a.data() as Map)['start_time'] as String? ?? '')
                         .compareTo((b.data() as Map)['start_time'] as String? ?? ''));
                   if (docs.isEmpty) {
                     return Center(
@@ -832,20 +845,26 @@ class _AbsensiStat extends StatelessWidget {
 }
 
 // ─── KUIS TAB ───
-class _KuisTab extends StatelessWidget {
+class _KuisTab extends StatefulWidget {
   final String uid, kelas;
   const _KuisTab({required this.uid, required this.kelas});
+  @override State<_KuisTab> createState() => _KuisTabState();
+}
+class _KuisTabState extends State<_KuisTab> {
+  late Future<QuerySnapshot> _f;
+  @override void initState() { super.initState(); _load(); }
+  void _load() => _f = FirebaseFirestore.instance
+      .collection(FirebaseConstants.quizzes)
+      .where('class', isEqualTo: widget.kelas).get();
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.quizzes)
-          .where('class', isEqualTo: kelas)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (_, snap) {
-        if (snap.hasError) return _errWidget('Gagal memuat kuis');
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return _retryWidget('Gagal memuat kuis', () => setState(_load));
         final docs = snap.data!.docs
           ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
@@ -868,7 +887,7 @@ class _KuisTab extends StatelessWidget {
             final questions = (data['questions'] as List?)?.length ?? 0;
             return AppCard(
               onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => QuizPage(quizId: docs[i].id, quizData: data, studentId: uid))),
+                  builder: (_) => QuizPage(quizId: docs[i].id, quizData: data, studentId: widget.uid))),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -887,7 +906,7 @@ class _KuisTab extends StatelessWidget {
                   FutureBuilder<QuerySnapshot>(
                     future: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
                         .where('quiz_id', isEqualTo: docs[i].id)
-                        .where('student_id', isEqualTo: uid)
+                        .where('student_id', isEqualTo: widget.uid)
                         .get(),
                     builder: (_, aSnap) {
                       final done = (aSnap.data?.docs.isNotEmpty ?? false);
@@ -916,21 +935,27 @@ class _KuisTab extends StatelessWidget {
 }
 
 // ─── NILAI TAB ───
-class _NilaiTab extends StatelessWidget {
+class _NilaiTab extends StatefulWidget {
   final String uid;
   const _NilaiTab({required this.uid});
+  @override State<_NilaiTab> createState() => _NilaiTabState();
+}
+class _NilaiTabState extends State<_NilaiTab> {
+  late Future<QuerySnapshot> _f;
+  @override void initState() { super.initState(); _load(); }
+  void _load() => _f = FirebaseFirestore.instance
+      .collection(FirebaseConstants.submissions)
+      .where('student_id', isEqualTo: widget.uid)
+      .where('status', isEqualTo: TugasStatus.sudahDinilai).get();
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.submissions)
-          .where('student_id', isEqualTo: uid)
-          .where('status', isEqualTo: TugasStatus.sudahDinilai)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (_, snap) {
-        if (snap.hasError) return _errWidget('Gagal memuat nilai');
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return _retryWidget('Gagal memuat nilai', () => setState(_load));
         final docs = snap.data!.docs
           ..sort((a, b) => ((b.data() as Map)['graded_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['graded_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
@@ -1181,7 +1206,7 @@ void _showAllAnnouncements(BuildContext context) {
   );
 }
 
-// Helper: tampilkan pesan error ringan
+// Helper: error ringan
 Widget _errWidget(String msg) => Center(
   child: Padding(
     padding: const EdgeInsets.all(24),
@@ -1189,9 +1214,24 @@ Widget _errWidget(String msg) => Center(
       const Icon(Icons.wifi_off_outlined, size: 48, color: AppTheme.textMuted),
       const SizedBox(height: 12),
       Text(msg, style: const TextStyle(color: AppTheme.textMuted)),
-      const SizedBox(height: 4),
-      const Text('Periksa koneksi internet Anda.',
-          style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+    ]),
+  ),
+);
+
+// Helper: error dengan tombol retry
+Widget _retryWidget(String msg, VoidCallback onRetry) => Center(
+  child: Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.error_outline, size: 48, color: AppTheme.textMuted),
+      const SizedBox(height: 12),
+      Text(msg, style: const TextStyle(color: AppTheme.textMuted), textAlign: TextAlign.center),
+      const SizedBox(height: 16),
+      ElevatedButton.icon(
+        onPressed: onRetry,
+        icon: const Icon(Icons.refresh, size: 18),
+        label: const Text('Coba Lagi'),
+      ),
     ]),
   ),
 );

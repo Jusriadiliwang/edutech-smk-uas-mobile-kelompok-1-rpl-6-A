@@ -126,15 +126,15 @@ class _BKHomeTab extends StatelessWidget {
           const Text('Booking Konseling Menunggu Konfirmasi',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
+          FutureBuilder<QuerySnapshot>(
+          future: FirebaseFirestore.instance
               .collection(FirebaseConstants.counseling)
               .where('bk_id', isEqualTo: uid)
               .where('status', isEqualTo: KonselingStatus.pending)
-              .snapshots(),
+              .get(),
             builder: (_, snap) {
+              if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-              if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snap.data!.docs
                 ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                     .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
@@ -209,14 +209,14 @@ class _KonselingTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
+      body: FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
             .where('bk_id', isEqualTo: uid)
-            .snapshots(),
+            .get(),
         builder: (_, snap) {
+          if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final docs = snap.data!.docs
             ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                 .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
@@ -350,14 +350,15 @@ class _ChatBKTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
           .collection(FirebaseConstants.counseling)
           .where('bk_id', isEqualTo: uid)
           .where('status', whereIn: [KonselingStatus.open, KonselingStatus.inProgress, KonselingStatus.approved])
-          .snapshots(),
+          .get(),
       builder: (_, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
         final docs = snap.data!.docs;
         if (docs.isEmpty) {
           return const Center(child: Column(
