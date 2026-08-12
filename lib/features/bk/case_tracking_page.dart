@@ -35,14 +35,16 @@ class CaseTrackingPage extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
             .where('bk_id', isEqualTo: bkId)
-            .orderBy('created_at', descending: true)
             .snapshots(),
         builder: (context, snap) {
+          if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final allDocs = snap.data!.docs;
+          final allDocs = snap.data!.docs
+            ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
 
           // Grup per status
           final grouped = {

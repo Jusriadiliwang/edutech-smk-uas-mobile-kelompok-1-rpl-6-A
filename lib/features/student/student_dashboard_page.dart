@@ -236,12 +236,14 @@ class _HomeTab extends StatelessWidget {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection(FirebaseConstants.announcements)
-                .orderBy('created_at', descending: true)
                 .limit(3)
                 .snapshots(),
             builder: (context, snap) {
+              if (snap.hasError) return const SizedBox.shrink();
               if (!snap.hasData) return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
-              final docs = snap.data!.docs;
+              final docs = snap.data!.docs
+                ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
+                    ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
               if (docs.isEmpty) {
                 return const AppCard(child: Center(
                   child: Text('Belum ada pengumuman.', style: TextStyle(color: AppTheme.textMuted)),
@@ -353,11 +355,13 @@ class _MateriTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.materials)
           .where('class', isEqualTo: kelas)
-          .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) return _errWidget('Gagal memuat materi');
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
+              ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
         if (docs.isEmpty) {
           return const Center(child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -427,11 +431,16 @@ class _TugasTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.assignments)
           .where('class', isEqualTo: kelas)
-          .orderBy('deadline')
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) return _errWidget('Gagal memuat tugas');
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) {
+            final ta = (a.data() as Map)['deadline'] as Timestamp?;
+            final tb = (b.data() as Map)['deadline'] as Timestamp?;
+            return (ta ?? Timestamp.now()).compareTo(tb ?? Timestamp.now());
+          });
         if (docs.isEmpty) {
           return const Center(child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -532,11 +541,13 @@ class _JadwalTab extends StatelessWidget {
                     .collection(FirebaseConstants.schedules)
                     .where('class', isEqualTo: kelas)
                     .where('day', isEqualTo: day)
-                    .orderBy('start_time')
                     .snapshots(),
                 builder: (_, snap) {
+                  if (snap.hasError) return Center(child: Text('Error', style: const TextStyle(color: AppTheme.danger)));
                   if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-                  final docs = snap.data!.docs;
+                  final docs = snap.data!.docs
+                    ..sort((a, b) => ((a.data() as Map)['start_time'] as String? ?? '')
+                        .compareTo((b.data() as Map)['start_time'] as String? ?? ''));
                   if (docs.isEmpty) {
                     return Center(
                       child: Text('Tidak ada jadwal $day.',
@@ -609,11 +620,16 @@ class _AbsensiTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.absences)
           .where('student_id', isEqualTo: uid)
-          .orderBy('date', descending: true)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) return _errWidget('Gagal memuat absensi');
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) {
+            final ta = (a.data() as Map)['date'] as Timestamp?;
+            final tb = (b.data() as Map)['date'] as Timestamp?;
+            return (tb ?? Timestamp.now()).compareTo(ta ?? Timestamp.now());
+          });
         final hadir  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
         final alpha  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.alpha).length;
         final izin   = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.izin).length;
@@ -802,11 +818,13 @@ class _KuisTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.quizzes)
           .where('class', isEqualTo: kelas)
-          .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (_, snap) {
+        if (snap.hasError) return _errWidget('Gagal memuat kuis');
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
+              ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
         if (docs.isEmpty) {
           return const Center(child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -885,11 +903,13 @@ class _NilaiTab extends StatelessWidget {
           .collection(FirebaseConstants.submissions)
           .where('student_id', isEqualTo: uid)
           .where('status', isEqualTo: TugasStatus.sudahDinilai)
-          .orderBy('graded_at', descending: true)
           .snapshots(),
       builder: (_, snap) {
+        if (snap.hasError) return _errWidget('Gagal memuat nilai');
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) => ((b.data() as Map)['graded_at'] as Timestamp?)
+              ?.compareTo((a.data() as Map)['graded_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
 
         if (docs.isEmpty) {
           return const Center(child: Column(
@@ -1136,3 +1156,18 @@ void _showAllAnnouncements(BuildContext context) {
     ),
   );
 }
+
+// Helper: tampilkan pesan error ringan
+Widget _errWidget(String msg) => Center(
+  child: Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.wifi_off_outlined, size: 48, color: AppTheme.textMuted),
+      const SizedBox(height: 12),
+      Text(msg, style: const TextStyle(color: AppTheme.textMuted)),
+      const SizedBox(height: 4),
+      const Text('Periksa koneksi internet Anda.',
+          style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+    ]),
+  ),
+);

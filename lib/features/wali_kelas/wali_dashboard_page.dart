@@ -253,11 +253,13 @@ class _AkademikTab extends StatelessWidget {
               .collection('submissions')
               .where('student_id', whereIn: studentIds.take(10).toList())
               .where('status', isEqualTo: 'GRADED')
-              .orderBy('graded_at', descending: true)
               .snapshots(),
           builder: (_, snap) {
+            if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final docs = snap.data!.docs;
+            final docs = snap.data!.docs
+              ..sort((a, b) => (((b.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                  .compareTo(((a.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
             final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
             final avg = grades.isEmpty ? 0.0 : grades.fold<num>(0, (a, b) => a + b) / grades.length;
 
@@ -338,12 +340,14 @@ class _AbsensiTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.absences)
           .where('class', isEqualTo: kelas)
-          .orderBy('date', descending: true)
           .limit(100)
           .snapshots(),
       builder: (_, snap) {
+        if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) => (((b.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+              .compareTo(((a.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
         final alpha = docs.where((d) => (d.data() as Map)['status'] == 'ALPHA').length;
         return Column(
           children: [

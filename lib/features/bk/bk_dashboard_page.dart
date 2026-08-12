@@ -127,15 +127,17 @@ class _BKHomeTab extends StatelessWidget {
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection(FirebaseConstants.counseling)
-                .where('bk_id', isEqualTo: uid)
-                .where('status', isEqualTo: KonselingStatus.pending)
-                .orderBy('created_at', descending: true)
-                .snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection(FirebaseConstants.counseling)
+              .where('bk_id', isEqualTo: uid)
+              .where('status', isEqualTo: KonselingStatus.pending)
+              .snapshots(),
             builder: (_, snap) {
+              if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snap.data!.docs;
+              final docs = snap.data!.docs
+                ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                    .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
                 return const AppCard(child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
@@ -211,11 +213,13 @@ class _KonselingTab extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
             .where('bk_id', isEqualTo: uid)
-            .orderBy('created_at', descending: true)
             .snapshots(),
         builder: (_, snap) {
+          if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final docs = snap.data!.docs;
+          final docs = snap.data!.docs
+            ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,

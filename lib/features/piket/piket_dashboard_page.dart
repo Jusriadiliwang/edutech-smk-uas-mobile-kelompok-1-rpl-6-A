@@ -157,11 +157,13 @@ class _PiketHomeTab extends StatelessWidget {
             stream: FirebaseFirestore.instance
                 .collection(FirebaseConstants.piketLog)
                 .where('date_str', isEqualTo: today)
-                .orderBy('created_at', descending: true)
                 .snapshots(),
             builder: (_, snap) {
+              if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snap.data!.docs;
+              final docs = snap.data!.docs
+                ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                    .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
                 return const AppCard(child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),

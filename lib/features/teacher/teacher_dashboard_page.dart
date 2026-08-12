@@ -151,15 +151,17 @@ class _TeacherHomeTab extends StatelessWidget {
           const Text('Tugas Menunggu Penilaian', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection(FirebaseConstants.submissions)
-                .where('status', isEqualTo: 'SUBMITTED')
-                .orderBy('submitted_at', descending: true)
-                .limit(5)
-                .snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection(FirebaseConstants.submissions)
+              .where('status', isEqualTo: 'SUBMITTED')
+              .limit(5)
+              .snapshots(),
             builder: (_, snap) {
+              if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snap.data!.docs;
+              final docs = snap.data!.docs
+                ..sort((a, b) => (((b.data() as Map)['submitted_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                    .compareTo(((a.data() as Map)['submitted_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
                 return const AppCard(child: Center(
                   child: Padding(
@@ -536,11 +538,13 @@ class _MateriManageTab extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection(FirebaseConstants.materials)
             .where('uploaded_by', isEqualTo: uid)
-            .orderBy('created_at', descending: true)
             .snapshots(),
         builder: (_, snap) {
+          if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final docs = snap.data!.docs;
+          final docs = snap.data!.docs
+            ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
@@ -604,11 +608,13 @@ class _TugasManageTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection(FirebaseConstants.assignments)
           .where('created_by', isEqualTo: uid)
-          .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (_, snap) {
+        if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+          ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+              .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
@@ -911,10 +917,12 @@ class _StatistikTab extends StatelessWidget {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection(FirebaseConstants.quizzes)
                 .where('created_by', isEqualTo: uid)
-                .orderBy('created_at', descending: true)
                 .snapshots(),
             builder: (_, snap) {
-              final docs = snap.data?.docs ?? [];
+              if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
+              final docs = (snap.data?.docs ?? [])
+                ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+                    .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
                 return AppCard(child: Center(child: Padding(
                   padding: const EdgeInsets.all(16),
