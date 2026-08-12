@@ -610,31 +610,55 @@ class _JadwalTab extends StatelessWidget {
 }
 
 // ─── ABSENSI TAB ───
-class _AbsensiTab extends StatelessWidget {
+class _AbsensiTab extends StatefulWidget {
   final String uid;
   const _AbsensiTab({required this.uid});
+  @override
+  State<_AbsensiTab> createState() => _AbsensiTabState();
+}
+class _AbsensiTabState extends State<_AbsensiTab> {
+  late Future<QuerySnapshot> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    _future = FirebaseFirestore.instance
+        .collection(FirebaseConstants.absences)
+        .where('student_id', isEqualTo: widget.uid)
+        .get();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.absences)
-          .where('student_id', isEqualTo: uid)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _future,
       builder: (context, snap) {
-        if (snap.hasError) return _errWidget('Gagal memuat absensi');
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) {
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
+            const SizedBox(height: 12),
+            Text('Error: ${snap.error}', style: const TextStyle(color: AppTheme.textMuted), textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: () => setState(_load), child: const Text('Coba Lagi')),
+          ]));
+        }
         final docs = snap.data!.docs
           ..sort((a, b) {
             final ta = (a.data() as Map)['date'] as Timestamp?;
             final tb = (b.data() as Map)['date'] as Timestamp?;
             return (tb ?? Timestamp.now()).compareTo(ta ?? Timestamp.now());
           });
-        final hadir  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
-        final alpha  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.alpha).length;
-        final izin   = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.izin).length;
-        final sakit  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.sakit).length;
-        final total  = docs.length;
+        final hadir = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
+        final alpha = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.alpha).length;
+        final izin  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.izin).length;
+        final sakit = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.sakit).length;
+        final total = docs.length;
         final persen = total > 0 ? (hadir / total * 100).toStringAsFixed(1) : '0.0';
 
         return SingleChildScrollView(

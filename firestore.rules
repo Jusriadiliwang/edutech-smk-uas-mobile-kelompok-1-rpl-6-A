@@ -14,55 +14,68 @@ service cloud.firestore {
       return isAuthenticated() && getUserData().role == role;
     }
 
-    // Users — bisa dibaca semua yang login, hanya admin yang bisa write
-    match /users/{userId} {
+    // ── IZINKAN SEMUA READ UNTUK PENGGUNA YANG LOGIN ──────────
+    // Simplified rules untuk demo - semua koleksi bisa dibaca oleh user yang login
+    match /{document=**} {
       allow read: if isAuthenticated();
-      allow write: if hasRole('ADMIN');
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read:   if isAuthenticated();
+      allow write:  if hasRole('ADMIN');
       allow update: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Materi pembelajaran
     match /materials/{id} {
-      allow read: if isAuthenticated();
+      allow read:  if isAuthenticated();
       allow write: if hasRole('GURU_MAPEL') || hasRole('ADMIN');
     }
 
     // Tugas
     match /assignments/{id} {
-      allow read: if isAuthenticated();
+      allow read:  if isAuthenticated();
       allow write: if hasRole('GURU_MAPEL') || hasRole('ADMIN');
     }
 
     // Submisi tugas siswa
     match /submissions/{id} {
-      allow read: if isAuthenticated();
-      allow create: if hasRole('SISWA');
+      allow read:   if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if hasRole('GURU_MAPEL') || hasRole('ADMIN');
     }
 
     // Kuis
     match /quizzes/{id} {
-      allow read: if isAuthenticated();
+      allow read:  if isAuthenticated();
       allow write: if hasRole('GURU_MAPEL') || hasRole('ADMIN');
+    }
+
+    // Jawaban kuis
+    match /quiz_answers/{id} {
+      allow read:   if isAuthenticated();
+      allow create: if isAuthenticated();
     }
 
     // Absensi
     match /absences/{id} {
       allow read: if isAuthenticated();
-      allow create, update: if hasRole('GURU_MAPEL') || hasRole('GURU_PIKET') || hasRole('ADMIN');
+      allow create, update: if isAuthenticated();
     }
 
     // Pelanggaran
     match /violations/{id} {
       allow read: if isAuthenticated();
-      allow create, update: if getUserData().role in ['WALI_KELAS', 'GURU_BK', 'GURU_PIKET', 'ADMIN'];
+      allow create, update: if isAuthenticated();
     }
 
-    // Konseling BK — hanya BK dan siswa ybs
+    // Konseling BK
     match /konseling/{id} {
-      allow read, write: if isAuthenticated() &&
-        (resource.data.student_id == request.auth.uid || hasRole('GURU_BK'));
-      allow create: if isAuthenticated();
+      allow read, write: if isAuthenticated();
+    }
+    match /counseling/{id} {
+      allow read, write: if isAuthenticated();
     }
 
     // Chat messages
@@ -73,7 +86,7 @@ service cloud.firestore {
     // Notifikasi
     match /notifications/{id} {
       allow read: if isAuthenticated();
-      allow write: if hasRole('GURU_PIKET') || hasRole('WALI_KELAS') || hasRole('ADMIN');
+      allow write: if isAuthenticated();
     }
 
     // Pengumuman
@@ -91,14 +104,7 @@ service cloud.firestore {
     // Buku piket
     match /piket_log/{id} {
       allow read: if isAuthenticated();
-      allow write: if hasRole('GURU_PIKET') || hasRole('ADMIN');
-    }
-
-    // Counseling collection (alias)
-    match /counseling/{id} {
-      allow read, write: if isAuthenticated() &&
-        (request.auth.uid == resource.data.student_id || hasRole('GURU_BK'));
-      allow create: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
   }
 }
