@@ -34,13 +34,13 @@ class CaseTrackingPage extends StatelessWidget {
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
-            .where('bk_id', isEqualTo: bkId)
-            .get(),
+            .get(), // NO where - filter client-side
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
 
           final allDocs = snap.data!.docs
+              .where((d) => (d.data() as Map)['bk_id'] == bkId).toList()
             ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                 .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
 

@@ -75,9 +75,23 @@ class _WaliDashboardPageState extends State<WaliDashboardPage> {
 }
 
 // ─── HOME TAB ───
-class _WaliHomeTab extends StatelessWidget {
+class _WaliHomeTab extends StatefulWidget {
   final String uid, kelas;
   const _WaliHomeTab({required this.uid, required this.kelas});
+  @override
+  State<_WaliHomeTab> createState() => _WaliHomeTabState();
+}
+
+class _WaliHomeTabState extends State<_WaliHomeTab> {
+  late Future<QuerySnapshot> _studentsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _studentsFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.users)
+        .get(); // NO where - filter client-side
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +115,7 @@ class _WaliHomeTab extends StatelessWidget {
               children: [
                 const Text('Dashboard Wali Kelas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
                 const SizedBox(height: 4),
-                Text('Kelas Perwalian: $kelas', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                Text('Kelas Perwalian: ${widget.kelas}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
                 const SizedBox(height: 4),
                 Text(DateFormat('d MMMM yyyy', 'id_ID').format(DateTime.now()),
                     style: const TextStyle(fontSize: 12, color: Colors.white60)),
@@ -111,7 +125,7 @@ class _WaliHomeTab extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Alert System
-          AlertSystemWidget(kelas: kelas),
+          AlertSystemWidget(kelas: widget.kelas),
 
           const SizedBox(height: 20),
           const Text('Menu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -122,7 +136,7 @@ class _WaliHomeTab extends StatelessWidget {
                 icon: Icons.chat_outlined, label: 'Buku\nPenghubung',
                 color: AppTheme.primary,
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => ChatRoomPage(chatId: 'wali_$kelas', title: 'Buku Penghubung'))),
+                    MaterialPageRoute(builder: (_) => ChatRoomPage(chatId: 'wali_${widget.kelas}', title: 'Buku Penghubung'))),
               )),
               const SizedBox(width: 10),
               Expanded(child: _WaliMenuCard(
@@ -135,7 +149,7 @@ class _WaliHomeTab extends StatelessWidget {
               Expanded(child: _WaliMenuCard(
                 icon: Icons.notifications_active_outlined, label: 'Kirim\nNotifikasi',
                 color: AppTheme.secondary,
-                onTap: () => _sendNotif(context, kelas),
+                onTap: () => _sendNotif(context, widget.kelas),
               )),
             ],
           ),
@@ -143,15 +157,14 @@ class _WaliHomeTab extends StatelessWidget {
           const SizedBox(height: 20),
           const Text('Siswa Kelas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection(FirebaseConstants.users)
-                .where('class', isEqualTo: kelas)
-                .where('role', isEqualTo: 'SISWA')
-                .snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: _studentsFuture,
             builder: (_, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final students = snap.data!.docs;
+              final students = snap.data!.docs.where((s) {
+                final data = s.data() as Map;
+                return data['class'] == widget.kelas && data['role'] == 'SISWA';
+              }).toList();
               return Column(
                 children: students.map((s) {
                   final data = s.data() as Map<String, dynamic>;
@@ -227,102 +240,117 @@ class _WaliHomeTab extends StatelessWidget {
 }
 
 // ─── AKADEMIK TAB ───
-class _AkademikTab extends StatelessWidget {
+class _AkademikTab extends StatefulWidget {
   final String kelas;
   const _AkademikTab({required this.kelas});
+  @override
+  State<_AkademikTab> createState() => _AkademikTabState();
+}
+
+class _AkademikTabState extends State<_AkademikTab> {
+  late Future<List<QuerySnapshot>> _futures;
+
+  @override
+  void initState() {
+    super.initState();
+    _futures = Future.wait([
+      FirebaseFirestore.instance.collection('users').get(),       // NO where
+      FirebaseFirestore.instance.collection('submissions').get(), // NO where
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Ambil dulu siswa yang ada di kelas ini, lalu tampilkan nilai mereka
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('class', isEqualTo: kelas)
-          .where('role', isEqualTo: 'SISWA')
-          .snapshots(),
-      builder: (_, usersSnap) {
-        if (!usersSnap.hasData) return const Center(child: CircularProgressIndicator());
-        final students = usersSnap.data!.docs;
+    return FutureBuilder<List<QuerySnapshot>>(
+      future: _futures,
+      builder: (_, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
+
+        final usersSnap       = snap.data![0];
+        final submissionsSnap = snap.data![1];
+
+        // Client-side filter: students in this class
+        final students = usersSnap.docs.where((s) {
+          final data = s.data() as Map;
+          return data['class'] == widget.kelas && data['role'] == 'SISWA';
+        }).toList();
+
         if (students.isEmpty) {
           return const Center(child: Text('Belum ada siswa di kelas ini.', style: TextStyle(color: AppTheme.textMuted)));
         }
-        final studentIds = students.map((s) => s.id).toList();
 
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('submissions')
-              .where('student_id', whereIn: studentIds.take(10).toList())
-              .where('status', isEqualTo: 'GRADED')
-              .snapshots(),
-          builder: (_, snap) {
-            if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final docs = snap.data!.docs
-              ..sort((a, b) => (((b.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
-                  .compareTo(((a.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
-            final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
-            final avg = grades.isEmpty ? 0.0 : grades.fold<num>(0, (a, b) => a + b) / grades.length;
+        final studentIds = students.map((s) => s.id).toSet();
 
-            return ListView(
+        // Client-side filter: graded submissions for students in class
+        final docs = submissionsSnap.docs.where((d) {
+          final data = d.data() as Map;
+          return studentIds.contains(data['student_id']) && data['status'] == 'GRADED';
+        }).toList()
+          ..sort((a, b) => (((b.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
+              .compareTo(((a.data() as Map)['graded_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
+
+        final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
+        final avg = grades.isEmpty ? 0.0 : grades.fold<num>(0, (a, b) => a + b) / grades.length;
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Summary card
+            Container(
               padding: const EdgeInsets.all(16),
-              children: [
-                // Summary card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(children: [
+                const Icon(Icons.school, color: Colors.white, size: 28),
+                const SizedBox(width: 12),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Kelas ${widget.kelas}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(avg.toStringAsFixed(1),
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+                  Text('Rata-rata dari ${docs.length} penilaian',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                ]),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            if (docs.isEmpty)
+              const AppCard(child: Center(child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Belum ada nilai siswa.', style: TextStyle(color: AppTheme.textMuted)))))
+            else
+              ...docs.map((d) {
+                final data = d.data() as Map<String, dynamic>;
+                final grade = data['grade'] as num? ?? 0;
+                final color = grade >= 75 ? AppTheme.secondary : AppTheme.danger;
+                return AppCard(
+                  padding: const EdgeInsets.all(14),
                   child: Row(children: [
-                    const Icon(Icons.school, color: Colors.white, size: 28),
-                    const SizedBox(width: 12),
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Kelas $kelas', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text(avg.toStringAsFixed(1),
-                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
-                      Text('Rata-rata dari ${docs.length} penilaian',
-                          style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                    ]),
+                    const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.secondary),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users').doc(data['student_id']).get(),
+                        builder: (_, s) => Text(
+                          (s.data?.data() as Map?)?['name'] ?? 'Siswa',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('assignments').doc(data['assignment_id']).get(),
+                        builder: (_, a) => Text(
+                          (a.data?.data() as Map?)?['title'] ?? 'Tugas',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                      ),
+                    ])),
+                    StatusBadge(label: '$grade', color: color),
                   ]),
-                ),
-                const SizedBox(height: 10),
-                if (docs.isEmpty)
-                  const AppCard(child: Center(child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Belum ada nilai siswa.', style: TextStyle(color: AppTheme.textMuted)))))
-                else
-                  ...docs.map((d) {
-                    final data = d.data() as Map<String, dynamic>;
-                    final grade = data['grade'] as num? ?? 0;
-                    final color = grade >= 75 ? AppTheme.secondary : AppTheme.danger;
-                    return AppCard(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(children: [
-                        const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.secondary),
-                        const SizedBox(width: 10),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('users').doc(data['student_id']).get(),
-                            builder: (_, s) => Text(
-                              (s.data?.data() as Map?)?['name'] ?? 'Siswa',
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                          FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('assignments').doc(data['assignment_id']).get(),
-                            builder: (_, a) => Text(
-                              (a.data?.data() as Map?)?['title'] ?? 'Tugas',
-                              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                          ),
-                        ])),
-                        StatusBadge(label: '$grade', color: color),
-                      ]),
-                    );
-                  }),
-              ],
-            );
-          },
+                );
+              }),
+          ],
         );
       },
     );
@@ -339,13 +367,12 @@ class _AbsensiTab extends StatelessWidget {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance
           .collection(FirebaseConstants.absences)
-          .where('class', isEqualTo: kelas)
-          .limit(100)
-          .get(),
+          .get(), // NO where - filter client-side
       builder: (_, snap) {
         if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['class'] == kelas).toList()
           ..sort((a, b) => (((b.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
               .compareTo(((a.data() as Map)['date'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
         final alpha = docs.where((d) => (d.data() as Map)['status'] == 'ALPHA').length;

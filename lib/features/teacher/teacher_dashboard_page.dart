@@ -79,9 +79,23 @@ class _TeacherDashboardPageState extends State<TeacherDashboardPage> {
 }
 
 // ─── HOME TAB ───
-class _TeacherHomeTab extends StatelessWidget {
+class _TeacherHomeTab extends StatefulWidget {
   final String uid, name;
   const _TeacherHomeTab({required this.uid, required this.name});
+  @override
+  State<_TeacherHomeTab> createState() => _TeacherHomeTabState();
+}
+
+class _TeacherHomeTabState extends State<_TeacherHomeTab> {
+  late Future<QuerySnapshot> _pendingFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _pendingFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.submissions)
+        .get(); // NO where - filter client-side
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +117,7 @@ class _TeacherHomeTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Selamat Mengajar, $name! 🎓',
+                Text('Selamat Mengajar, ${widget.name}! 🎓',
                     style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
                 const SizedBox(height: 4),
                 Text(DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(DateTime.now()),
@@ -121,21 +135,21 @@ class _TeacherHomeTab extends StatelessWidget {
                 label: 'Upload\nMateri',
                 color: const Color(0xFF7C3AED),
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => UploadMaterialPage(teacherId: uid))),
+                    MaterialPageRoute(builder: (_) => UploadMaterialPage(teacherId: widget.uid))),
               )),
               const SizedBox(width: 10),
               Expanded(child: _QuickAction(
                 icon: Icons.add_task,
                 label: 'Buat\nTugas',
                 color: const Color(0xFF2563EB),
-                onTap: () => _showCreateAssignment(context, uid),
+                onTap: () => _showCreateAssignment(context, widget.uid),
               )),
               const SizedBox(width: 10),
               Expanded(child: _QuickAction(
                 icon: Icons.quiz_outlined,
                 label: 'Buat\nKuis',
                 color: const Color(0xFF10B981),
-                onTap: () => _showCreateQuiz(context, uid),
+                onTap: () => _showCreateQuiz(context, widget.uid),
               )),
               const SizedBox(width: 10),
               Expanded(child: _QuickAction(
@@ -150,19 +164,17 @@ class _TeacherHomeTab extends StatelessWidget {
           const SizedBox(height: 20),
           const Text('Tugas Menunggu Penilaian', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection(FirebaseConstants.submissions)
-              .where('status', isEqualTo: 'SUBMITTED')
-              .limit(5)
-              .snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: _pendingFuture,
             builder: (_, snap) {
               if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snap.data!.docs
+                  .where((d) => (d.data() as Map)['status'] == 'SUBMITTED').toList()
                 ..sort((a, b) => (((b.data() as Map)['submitted_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                     .compareTo(((a.data() as Map)['submitted_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
-              if (docs.isEmpty) {
+              final limited = docs.take(5).toList();
+              if (limited.isEmpty) {
                 return const AppCard(child: Center(
                   child: Padding(
                     padding: EdgeInsets.all(16),
@@ -170,7 +182,7 @@ class _TeacherHomeTab extends StatelessWidget {
                   ),
                 ));
               }
-              return Column(children: docs.map((d) {
+              return Column(children: limited.map((d) {
                 final data = d.data() as Map<String, dynamic>;
                 return AppCard(
                   onTap: () => _gradeSubmission(context, d.id, data),
@@ -527,22 +539,34 @@ class _TeacherHomeTab extends StatelessWidget {
 }
 
 // ─── MATERI MANAGE TAB ───
-class _MateriManageTab extends StatelessWidget {
+class _MateriManageTab extends StatefulWidget {
   final String uid;
   const _MateriManageTab({required this.uid});
+  @override
+  State<_MateriManageTab> createState() => _MateriManageTabState();
+}
+
+class _MateriManageTabState extends State<_MateriManageTab> {
+  late Future<QuerySnapshot> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = FirebaseFirestore.instance
+        .collection(FirebaseConstants.materials)
+        .get(); // NO where - filter client-side
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection(FirebaseConstants.materials)
-            .where('uploaded_by', isEqualTo: uid)
-            .snapshots(),
+      body: FutureBuilder<QuerySnapshot>(
+        future: _f,
         builder: (_, snap) {
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final docs = snap.data!.docs
+              .where((d) => (d.data() as Map)['uploaded_by'] == widget.uid).toList()
             ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                 .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
           return ListView.builder(
@@ -588,7 +612,7 @@ class _MateriManageTab extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => UploadMaterialPage(teacherId: uid))),
+            MaterialPageRoute(builder: (_) => UploadMaterialPage(teacherId: widget.uid))),
         icon: const Icon(Icons.add),
         label: const Text('Upload Materi'),
         backgroundColor: AppTheme.primary,
@@ -598,21 +622,33 @@ class _MateriManageTab extends StatelessWidget {
 }
 
 // ─── TUGAS MANAGE TAB ───
-class _TugasManageTab extends StatelessWidget {
+class _TugasManageTab extends StatefulWidget {
   final String uid;
   const _TugasManageTab({required this.uid});
+  @override
+  State<_TugasManageTab> createState() => _TugasManageTabState();
+}
+
+class _TugasManageTabState extends State<_TugasManageTab> {
+  late Future<QuerySnapshot> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = FirebaseFirestore.instance
+        .collection(FirebaseConstants.assignments)
+        .get(); // NO where - filter client-side
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.assignments)
-          .where('created_by', isEqualTo: uid)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (_, snap) {
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['created_by'] == widget.uid).toList()
           ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
               .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
         return ListView.builder(
@@ -672,12 +708,12 @@ class _AbsensiInputTabState extends State<_AbsensiInputTab> {
     setState(() => _loading = true);
     final snap = await FirebaseFirestore.instance
         .collection(FirebaseConstants.users)
-        .where('class', isEqualTo: _kelas.trim())
-        .get();
+        .get(); // NO where - filter client-side
     setState(() {
-      _students = snap.docs;
+      _students = snap.docs
+          .where((s) => (s.data() as Map)['class'] == _kelas.trim()).toList();
       _statusMap.clear();
-      for (final s in snap.docs) {
+      for (final s in _students) {
         _statusMap[s.id] = AbsensiStatus.hadir;
       }
       _loading = false;
@@ -805,9 +841,31 @@ class _AbsensiInputTabState extends State<_AbsensiInputTab> {
 }
 
 // ─── STATISTIK TAB ───
-class _StatistikTab extends StatelessWidget {
+class _StatistikTab extends StatefulWidget {
   final String uid;
   const _StatistikTab({required this.uid});
+  @override
+  State<_StatistikTab> createState() => _StatistikTabState();
+}
+
+class _StatistikTabState extends State<_StatistikTab> {
+  late Future<QuerySnapshot> _submissionsFuture;
+  late Future<QuerySnapshot> _absencesFuture;
+  late Future<QuerySnapshot> _quizzesFuture;
+  late Future<QuerySnapshot> _quizAnswersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _submissionsFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.submissions).get(); // NO where
+    _absencesFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.absences).get(); // NO where
+    _quizzesFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.quizzes).get(); // NO where
+    _quizAnswersFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.quizAnswers).get(); // NO where
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -819,13 +877,11 @@ class _StatistikTab extends StatelessWidget {
           // Distribusi Nilai
           const Text('Distribusi Nilai Siswa', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection(FirebaseConstants.submissions)
-                .where('status', isEqualTo: TugasStatus.sudahDinilai)
-                .snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: _submissionsFuture,
             builder: (_, snap) {
-              final docs = snap.data?.docs ?? [];
+              final docs = (snap.data?.docs ?? [])
+                  .where((d) => (d.data() as Map)['status'] == TugasStatus.sudahDinilai).toList();
               if (docs.isEmpty) {
                 return AppCard(child: Center(
                   child: Padding(padding: const EdgeInsets.all(20),
@@ -880,10 +936,9 @@ class _StatistikTab extends StatelessWidget {
           const Text('Rekap Absensi Kelas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           FutureBuilder<QuerySnapshot>(
-            future: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
-                .where('teacher_id', isEqualTo: uid).get(),
+            future: _absencesFuture,
             builder: (_, snap) {
-              final docs = snap.data?.docs ?? [];
+              final docs = snap.data?.docs ?? []; // show all absences (no where filter)
               final hadir = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
               final alpha = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.alpha).length;
               final izin  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.izin).length;
@@ -914,13 +969,12 @@ class _StatistikTab extends StatelessWidget {
           // Kuis yang dibuat
           const Text('Kuis Saya', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection(FirebaseConstants.quizzes)
-                .where('created_by', isEqualTo: uid)
-                .snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: _quizzesFuture,
             builder: (_, snap) {
               if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               final docs = (snap.data?.docs ?? [])
+                  .where((d) => (d.data() as Map)['created_by'] == widget.uid).toList()
                 ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                     .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
@@ -954,12 +1008,13 @@ class _StatistikTab extends StatelessWidget {
                         Text('${data['mapel']} • Kelas ${data['class']} • $qCount soal',
                             style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                       ])),
-                      // Lihat jawaban siswa
+                      // Lihat jawaban siswa — reuse pre-fetched answers
                       FutureBuilder<QuerySnapshot>(
-                        future: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
-                            .where('quiz_id', isEqualTo: d.id).get(),
+                        future: _quizAnswersFuture,
                         builder: (_, aSnap) {
-                          final count = aSnap.data?.docs.length ?? 0;
+                          final count = (aSnap.data?.docs ?? [])
+                              .where((a) => (a.data() as Map)['quiz_id'] == d.id)
+                              .length;
                           return StatusBadge(label: '$count siswa', color: AppTheme.primary);
                         },
                       ),

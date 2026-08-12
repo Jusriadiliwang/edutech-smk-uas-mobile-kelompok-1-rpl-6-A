@@ -129,13 +129,14 @@ class _BKHomeTab extends StatelessWidget {
           FutureBuilder<QuerySnapshot>(
           future: FirebaseFirestore.instance
               .collection(FirebaseConstants.counseling)
-              .where('bk_id', isEqualTo: uid)
-              .where('status', isEqualTo: KonselingStatus.pending)
-              .get(),
+              .get(), // NO where - filter client-side
             builder: (_, snap) {
               if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-              final docs = snap.data!.docs
+              final docs = snap.data!.docs.where((d) {
+                final data = d.data() as Map;
+                return data['bk_id'] == uid && data['status'] == KonselingStatus.pending;
+              }).toList()
                 ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                     .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
@@ -212,12 +213,12 @@ class _KonselingTab extends StatelessWidget {
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance
             .collection(FirebaseConstants.counseling)
-            .where('bk_id', isEqualTo: uid)
-            .get(),
+            .get(), // NO where - filter client-side
         builder: (_, snap) {
           if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
           final docs = snap.data!.docs
+              .where((d) => (d.data() as Map)['bk_id'] == uid).toList()
             ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                 .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
           return ListView.builder(
@@ -353,13 +354,16 @@ class _ChatBKTab extends StatelessWidget {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance
           .collection(FirebaseConstants.counseling)
-          .where('bk_id', isEqualTo: uid)
-          .where('status', whereIn: [KonselingStatus.open, KonselingStatus.inProgress, KonselingStatus.approved])
-          .get(),
+          .get(), // NO where - filter client-side
       builder: (_, snap) {
         if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs.where((d) {
+          final data = d.data() as Map;
+          return data['bk_id'] == uid &&
+              [KonselingStatus.open, KonselingStatus.inProgress, KonselingStatus.approved]
+                  .contains(data['status']);
+        }).toList();
         if (docs.isEmpty) {
           return const Center(child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -446,19 +450,33 @@ class _BKStatCard extends StatelessWidget {
   );
 }
 
-class _CategoryRow extends StatelessWidget {
+class _CategoryRow extends StatefulWidget {
   final String category;
   const _CategoryRow({required this.category});
   @override
+  State<_CategoryRow> createState() => _CategoryRowState();
+}
+
+class _CategoryRowState extends State<_CategoryRow> {
+  late Future<QuerySnapshot> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = FirebaseFirestore.instance
+        .collection(FirebaseConstants.counseling)
+        .get(); // NO where - filter client-side
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.counseling)
-          .where('category', isEqualTo: category)
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: _f,
       builder: (_, snap) {
-        final count = snap.data?.docs.length ?? 0;
-        final color = _getCategoryColor(category);
+        final count = (snap.data?.docs ?? [])
+            .where((d) => (d.data() as Map)['category'] == widget.category)
+            .length;
+        final color = _getCategoryColor(widget.category);
         return Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
@@ -468,7 +486,7 @@ class _CategoryRow extends StatelessWidget {
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Text(category, style: const TextStyle(fontSize: 13))),
+              Expanded(child: Text(widget.category, style: const TextStyle(fontSize: 13))),
               Text('$count kasus',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
             ],

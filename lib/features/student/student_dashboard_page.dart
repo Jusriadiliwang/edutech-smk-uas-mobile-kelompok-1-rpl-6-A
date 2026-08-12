@@ -107,6 +107,77 @@ class _StudentDashboardPageState extends State<StudentDashboardPage> {
 }
 
 // ─── HOME TAB ───
+// StatefulWidget sub-widget for quick stats (avoids StreamBuilder+where)
+class _HomeQuickStats extends StatefulWidget {
+  final String uid, kelas;
+  const _HomeQuickStats({required this.uid, required this.kelas});
+  @override
+  State<_HomeQuickStats> createState() => _HomeQuickStatsState();
+}
+
+class _HomeQuickStatsState extends State<_HomeQuickStats> {
+  late Future<QuerySnapshot> _assignmentsFuture;
+  late Future<QuerySnapshot> _submissionsFuture;
+  late Future<QuerySnapshot> _absencesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _assignmentsFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.assignments).get(); // NO where
+    _submissionsFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.submissions).get(); // NO where
+    _absencesFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.absences).get(); // NO where
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<QuerySnapshot>(
+      future: _assignmentsFuture,
+      builder: (_, aSnap) {
+        final pending = (aSnap.data?.docs ?? [])
+            .where((d) => (d.data() as Map)['class'] == widget.kelas)
+            .length;
+        return FutureBuilder<QuerySnapshot>(
+          future: _submissionsFuture,
+          builder: (_, sSnap) {
+            final graded = (sSnap.data?.docs ?? []).where((d) {
+              final data = d.data() as Map;
+              return data['student_id'] == widget.uid && data['status'] == TugasStatus.sudahDinilai;
+            }).toList();
+            final avg = graded.isEmpty ? '-' :
+                (graded.fold<num>(0, (s, d) => s + ((d.data() as Map)['grade'] as num? ?? 0)) / graded.length)
+                    .toStringAsFixed(0);
+            return FutureBuilder<QuerySnapshot>(
+              future: _absencesFuture,
+              builder: (_, abSnap) {
+                final abs = (abSnap.data?.docs ?? [])
+                    .where((d) => (d.data() as Map)['student_id'] == widget.uid)
+                    .toList();
+                final hadir = abs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
+                final persen = abs.isEmpty ? '-' : '${(hadir / abs.length * 100).toStringAsFixed(0)}%';
+                return Row(
+                  children: [
+                    Expanded(child: _QuickStatCard(label: 'Tugas\nAktif', value: '$pending',
+                        color: AppTheme.warning, icon: Icons.assignment_late_outlined)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _QuickStatCard(label: 'Nilai\nRata-rata', value: avg,
+                        color: AppTheme.secondary, icon: Icons.grade_outlined)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _QuickStatCard(label: 'Kehadiran', value: persen,
+                        color: AppTheme.primary, icon: Icons.how_to_reg_outlined)),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _HomeTab extends StatelessWidget {
   final String uid, name, kelas;
   const _HomeTab({required this.uid, required this.name, required this.kelas});
@@ -152,48 +223,10 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Quick Stats — live dari Firestore
+          // Quick Stats — fetched via FutureBuilder, filter client-side
           const Text('Ringkasan', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection(FirebaseConstants.assignments)
-                .where('class', isEqualTo: kelas).snapshots(),
-            builder: (_, aSnap) {
-              final pending = (aSnap.data?.docs ?? []).length;
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection(FirebaseConstants.submissions)
-                    .where('student_id', isEqualTo: uid)
-                    .where('status', isEqualTo: TugasStatus.sudahDinilai).snapshots(),
-                builder: (_, sSnap) {
-                  final graded = (sSnap.data?.docs ?? []);
-                  final avg = graded.isEmpty ? '-' :
-                      (graded.fold<num>(0, (s, d) => s + ((d.data() as Map)['grade'] as num? ?? 0)) / graded.length)
-                          .toStringAsFixed(0);
-                  return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
-                        .where('student_id', isEqualTo: uid).snapshots(),
-                    builder: (_, abSnap) {
-                      final abs = abSnap.data?.docs ?? [];
-                      final hadir = abs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
-                      final persen = abs.isEmpty ? '-' : '${(hadir / abs.length * 100).toStringAsFixed(0)}%';
-                      return Row(
-                        children: [
-                          Expanded(child: _QuickStatCard(label: 'Tugas\nAktif', value: '$pending',
-                              color: AppTheme.warning, icon: Icons.assignment_late_outlined)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _QuickStatCard(label: 'Nilai\nRata-rata', value: avg,
-                              color: AppTheme.secondary, icon: Icons.grade_outlined)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _QuickStatCard(label: 'Kehadiran', value: persen,
-                              color: AppTheme.primary, icon: Icons.how_to_reg_outlined)),
-                        ],
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
+          _HomeQuickStats(uid: uid, kelas: kelas),
           const SizedBox(height: 20),
 
           // Menu Fitur
@@ -291,13 +324,19 @@ class _HomeTab extends StatelessWidget {
   void _showViolations(BuildContext ctx, String uid) {
     showModalBottomSheet(
       context: ctx,
-      builder: (_) => StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
+      builder: (_) => FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance
             .collection(FirebaseConstants.violations)
-            .where('student_id', isEqualTo: uid)
-            .snapshots(),
+            .get(), // NO where - filter client-side
         builder: (context, snap) {
-          final docs = snap.data?.docs ?? [];
+          if (snap.connectionState == ConnectionState.waiting)
+            return const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          final docs = (snap.data?.docs ?? [])
+              .where((d) => (d.data() as Map)['student_id'] == uid)
+              .toList();
           final totalPoin = docs.fold<int>(0, (sum, d) => sum + ((d.data() as Map)['points'] as int? ?? 0));
           return Padding(
             padding: const EdgeInsets.all(20),
@@ -354,8 +393,7 @@ class _MateriTabState extends State<_MateriTab> {
   late Future<QuerySnapshot> _f;
   @override void initState() { super.initState(); _load(); }
   void _load() => _f = FirebaseFirestore.instance
-      .collection(FirebaseConstants.materials)
-      .where('class', isEqualTo: widget.kelas).get();
+      .collection(FirebaseConstants.materials).get(); // filter client-side
 
   @override
   Widget build(BuildContext context) {
@@ -366,6 +404,7 @@ class _MateriTabState extends State<_MateriTab> {
           return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return _retryWidget('Gagal memuat materi', () => setState(_load));
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['class'] == widget.kelas).toList()
           ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
         if (docs.isEmpty) {
@@ -437,7 +476,7 @@ class _TugasTabState extends State<_TugasTab> {
   @override void initState() { super.initState(); _load(); }
   void _load() => _f = FirebaseFirestore.instance
       .collection(FirebaseConstants.assignments)
-      .where('class', isEqualTo: widget.kelas).get();
+      .get(); // NO where - filter client-side
 
   @override
   Widget build(BuildContext context) {
@@ -448,6 +487,7 @@ class _TugasTabState extends State<_TugasTab> {
           return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return _retryWidget('Gagal memuat tugas', () => setState(_load));
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['class'] == widget.kelas).toList()
           ..sort((a, b) {
             final ta = (a.data() as Map)['deadline'] as Timestamp?;
             final tb = (b.data() as Map)['deadline'] as Timestamp?;
@@ -522,11 +562,24 @@ class _TugasTabState extends State<_TugasTab> {
 }
 
 // ─── JADWAL TAB ───
-class _JadwalTab extends StatelessWidget {
+class _JadwalTab extends StatefulWidget {
   final String kelas;
   const _JadwalTab({required this.kelas});
+  @override
+  State<_JadwalTab> createState() => _JadwalTabState();
+}
 
+class _JadwalTabState extends State<_JadwalTab> {
   static const _days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+  late Future<QuerySnapshot> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = FirebaseFirestore.instance
+        .collection(FirebaseConstants.schedules)
+        .get(); // NO where - fetch once, filter client-side per tab
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -549,16 +602,17 @@ class _JadwalTab extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: _days.map((day) => FutureBuilder<QuerySnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection(FirebaseConstants.schedules)
-                    .where('class', isEqualTo: kelas)
-                    .where('day', isEqualTo: day)
-                    .get(),
+                future: _f, // reuse same future for all tabs
                 builder: (_, snap) {
                   if (snap.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
                   if (snap.hasError) return Center(child: Text('${snap.error}', style: const TextStyle(color: AppTheme.danger)));
                   final docs = snap.data!.docs
+                      .where((d) {
+                        final data = d.data() as Map;
+                        return data['class'] == widget.kelas && data['day'] == day;
+                      })
+                      .toList()
                     ..sort((a,b) => ((a.data() as Map)['start_time'] as String? ?? '')
                         .compareTo((b.data() as Map)['start_time'] as String? ?? ''));
                   if (docs.isEmpty) {
@@ -641,8 +695,7 @@ class _AbsensiTabState extends State<_AbsensiTab> {
   void _load() {
     _future = FirebaseFirestore.instance
         .collection(FirebaseConstants.absences)
-        .where('student_id', isEqualTo: widget.uid)
-        .get();
+        .get(); // NO where - filter client-side
   }
 
   @override
@@ -662,6 +715,7 @@ class _AbsensiTabState extends State<_AbsensiTab> {
           ]));
         }
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['student_id'] == widget.uid).toList()
           ..sort((a, b) {
             final ta = (a.data() as Map)['date'] as Timestamp?;
             final tb = (b.data() as Map)['date'] as Timestamp?;
@@ -852,10 +906,16 @@ class _KuisTab extends StatefulWidget {
 }
 class _KuisTabState extends State<_KuisTab> {
   late Future<QuerySnapshot> _f;
+  late Future<QuerySnapshot> _answersFuture;
   @override void initState() { super.initState(); _load(); }
-  void _load() => _f = FirebaseFirestore.instance
-      .collection(FirebaseConstants.quizzes)
-      .where('class', isEqualTo: widget.kelas).get();
+  void _load() {
+    _f = FirebaseFirestore.instance
+        .collection(FirebaseConstants.quizzes)
+        .get(); // NO where - filter client-side
+    _answersFuture = FirebaseFirestore.instance
+        .collection(FirebaseConstants.quizAnswers)
+        .get(); // pre-fetch all answers, reuse across list items
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -866,6 +926,7 @@ class _KuisTabState extends State<_KuisTab> {
           return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return _retryWidget('Gagal memuat kuis', () => setState(_load));
         final docs = snap.data!.docs
+            .where((d) => (d.data() as Map)['class'] == widget.kelas).toList()
           ..sort((a, b) => ((b.data() as Map)['created_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['created_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
         if (docs.isEmpty) {
@@ -904,14 +965,15 @@ class _KuisTabState extends State<_KuisTab> {
                   const SizedBox(height: 8),
                   // Cek apakah sudah dikerjakan
                   FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
-                        .where('quiz_id', isEqualTo: docs[i].id)
-                        .where('student_id', isEqualTo: widget.uid)
-                        .get(),
+                    future: _answersFuture,
                     builder: (_, aSnap) {
-                      final done = (aSnap.data?.docs.isNotEmpty ?? false);
+                      final filteredAnswers = (aSnap.data?.docs ?? []).where((a) {
+                        final aData = a.data() as Map;
+                        return aData['quiz_id'] == docs[i].id && aData['student_id'] == widget.uid;
+                      }).toList();
+                      final done = filteredAnswers.isNotEmpty;
                       final score = done
-                          ? (aSnap.data!.docs.first.data() as Map)['score'] ?? '-'
+                          ? (filteredAnswers.first.data() as Map)['score'] ?? '-'
                           : null;
                       return Row(children: [
                         Icon(done ? Icons.check_circle : Icons.play_circle_outline,
@@ -945,8 +1007,7 @@ class _NilaiTabState extends State<_NilaiTab> {
   @override void initState() { super.initState(); _load(); }
   void _load() => _f = FirebaseFirestore.instance
       .collection(FirebaseConstants.submissions)
-      .where('student_id', isEqualTo: widget.uid)
-      .where('status', isEqualTo: TugasStatus.sudahDinilai).get();
+      .get(); // NO where - filter client-side
 
   @override
   Widget build(BuildContext context) {
@@ -957,6 +1018,10 @@ class _NilaiTabState extends State<_NilaiTab> {
           return const Center(child: CircularProgressIndicator());
         if (snap.hasError) return _retryWidget('Gagal memuat nilai', () => setState(_load));
         final docs = snap.data!.docs
+            .where((d) {
+              final data = d.data() as Map;
+              return data['student_id'] == widget.uid && data['status'] == TugasStatus.sudahDinilai;
+            }).toList()
           ..sort((a, b) => ((b.data() as Map)['graded_at'] as Timestamp?)
               ?.compareTo((a.data() as Map)['graded_at'] as Timestamp? ?? Timestamp.now()) ?? 0);
 

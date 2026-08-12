@@ -96,10 +96,10 @@ class _PiketHomeTab extends StatelessWidget {
           FutureBuilder<QuerySnapshot>(
             future: FirebaseFirestore.instance
                 .collection(FirebaseConstants.absences)
-                .where('date_str', isEqualTo: today)
-                .get(),
+                .get(), // NO where - filter client-side
             builder: (_, snap) {
-              final docs = snap.data?.docs ?? [];
+              final docs = (snap.data?.docs ?? [])
+                  .where((d) => (d.data() as Map)['date_str'] == today).toList();
               final hadir     = docs.where((d) => (d.data() as Map)['status'] == 'HADIR').length;
               final terlambat = docs.where((d) => (d.data() as Map)['late'] == true).length;
               final alpha     = docs.where((d) => (d.data() as Map)['status'] == 'ALPHA').length;
@@ -156,12 +156,12 @@ class _PiketHomeTab extends StatelessWidget {
           FutureBuilder<QuerySnapshot>(
             future: FirebaseFirestore.instance
                 .collection(FirebaseConstants.piketLog)
-                .where('date_str', isEqualTo: today)
-                .get(),
+                .get(), // NO where - filter client-side
             builder: (_, snap) {
               if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
               final docs = snap.data!.docs
+                  .where((d) => (d.data() as Map)['date_str'] == today).toList()
                 ..sort((a, b) => (((b.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)
                     .compareTo(((a.data() as Map)['created_at'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
               if (docs.isEmpty) {
