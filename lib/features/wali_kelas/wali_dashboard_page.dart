@@ -233,63 +233,94 @@ class _AkademikTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ambil dulu siswa yang ada di kelas ini, lalu tampilkan nilai mereka
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection(FirebaseConstants.submissions)
-          .where('status', isEqualTo: 'GRADED')
+          .collection('users')
+          .where('class', isEqualTo: kelas)
+          .where('role', isEqualTo: 'SISWA')
           .snapshots(),
-      builder: (_, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            AppCard(
-              color: AppTheme.primaryLight,
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: AppTheme.primary),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Tampilkan rekap nilai seluruh siswa kelas perwalian dari Firestore.',
-                      style: TextStyle(fontSize: 13, color: AppTheme.primary),
-                    ),
+      builder: (_, usersSnap) {
+        if (!usersSnap.hasData) return const Center(child: CircularProgressIndicator());
+        final students = usersSnap.data!.docs;
+        if (students.isEmpty) {
+          return const Center(child: Text('Belum ada siswa di kelas ini.', style: TextStyle(color: AppTheme.textMuted)));
+        }
+        final studentIds = students.map((s) => s.id).toList();
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('submissions')
+              .where('student_id', whereIn: studentIds.take(10).toList())
+              .where('status', isEqualTo: 'GRADED')
+              .orderBy('graded_at', descending: true)
+              .snapshots(),
+          builder: (_, snap) {
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            final docs = snap.data!.docs;
+            final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
+            final avg = grades.isEmpty ? 0.0 : grades.fold<num>(0, (a, b) => a + b) / grades.length;
+
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Summary card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...snap.data!.docs.map((d) {
-              final data = d.data() as Map<String, dynamic>;
-              return AppCard(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.secondary),
-                    const SizedBox(width: 10),
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection(FirebaseConstants.users)
-                              .doc(data['student_id']).get(),
-                          builder: (_, s) => Text(s.data?.get('name') ?? 'Siswa',
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                        Text('Nilai: ${data['grade']}',
-                            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                      ],
-                    )),
-                    StatusBadge(
-                      label: '${data['grade']}',
-                      color: (data['grade'] as int? ?? 0) >= 75 ? AppTheme.secondary : AppTheme.danger,
-                    ),
-                  ],
+                  child: Row(children: [
+                    const Icon(Icons.school, color: Colors.white, size: 28),
+                    const SizedBox(width: 12),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Kelas $kelas', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(avg.toStringAsFixed(1),
+                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+                      Text('Rata-rata dari ${docs.length} penilaian',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    ]),
+                  ]),
                 ),
-              );
-            }),
-          ],
+                const SizedBox(height: 10),
+                if (docs.isEmpty)
+                  const AppCard(child: Center(child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Belum ada nilai siswa.', style: TextStyle(color: AppTheme.textMuted)))))
+                else
+                  ...docs.map((d) {
+                    final data = d.data() as Map<String, dynamic>;
+                    final grade = data['grade'] as num? ?? 0;
+                    final color = grade >= 75 ? AppTheme.secondary : AppTheme.danger;
+                    return AppCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(children: [
+                        const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.secondary),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('users').doc(data['student_id']).get(),
+                            builder: (_, s) => Text(
+                              (s.data?.data() as Map?)?['name'] ?? 'Siswa',
+                              style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                          FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('assignments').doc(data['assignment_id']).get(),
+                            builder: (_, a) => Text(
+                              (a.data?.data() as Map?)?['title'] ?? 'Tugas',
+                              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                          ),
+                        ])),
+                        StatusBadge(label: '$grade', color: color),
+                      ]),
+                    );
+                  }),
+              ],
+            );
+          },
         );
       },
     );

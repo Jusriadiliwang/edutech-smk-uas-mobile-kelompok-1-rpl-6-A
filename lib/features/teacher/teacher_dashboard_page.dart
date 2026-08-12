@@ -294,8 +294,163 @@ class _TeacherHomeTab extends StatelessWidget {
   }
 
   void _showCreateQuiz(BuildContext ctx, String uid) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('Fitur Quiz Builder dalam pengembangan.')));
+    final titleCtrl = TextEditingController();
+    final mapelCtrl = TextEditingController();
+    final kelasCtrl = TextEditingController();
+    int duration = 30;
+    final List<Map<String, dynamic>> questions = [];
+    bool loading = false;
+
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) {
+          void addQuestion() {
+            final qCtrl = TextEditingController();
+            final List<TextEditingController> optCtrls = List.generate(4, (_) => TextEditingController());
+            int answer = 0;
+            showDialog(
+              context: sheetCtx,
+              builder: (_) => StatefulBuilder(
+                builder: (dCtx, setD) => AlertDialog(
+                  title: const Text('Tambah Pertanyaan'),
+                  content: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      TextField(controller: qCtrl, maxLines: 3,
+                          decoration: const InputDecoration(labelText: 'Pertanyaan *')),
+                      const SizedBox(height: 12),
+                      ...List.generate(4, (i) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          Radio<int>(value: i, groupValue: answer,
+                              onChanged: (v) => setD(() => answer = v!)),
+                          Expanded(child: TextField(controller: optCtrls[i],
+                              decoration: InputDecoration(labelText: 'Opsi ${String.fromCharCode(65 + i)}'))),
+                        ]),
+                      )),
+                      const Text('Pilih radio button untuk jawaban benar',
+                          style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                    ]),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Batal')),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (qCtrl.text.trim().isEmpty) return;
+                        setSheet(() {
+                          questions.add({
+                            'question': qCtrl.text.trim(),
+                            'options': optCtrls.map((c) => c.text.trim()).toList(),
+                            'answer': answer,
+                            'type': 'MC',
+                          });
+                        });
+                        Navigator.pop(dCtx);
+                      },
+                      child: const Text('Tambah'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24, right: 24, top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Center(child: Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                const Text('Buat Kuis Baru', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                TextField(controller: titleCtrl,
+                    decoration: const InputDecoration(labelText: 'Judul Kuis *')),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: mapelCtrl,
+                      decoration: const InputDecoration(labelText: 'Mata Pelajaran *'))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: kelasCtrl,
+                      decoration: const InputDecoration(labelText: 'Kelas *'))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  const Text('Durasi: ', style: TextStyle(fontSize: 13)),
+                  DropdownButton<int>(
+                    value: duration,
+                    items: [15, 20, 30, 45, 60, 90].map((m) =>
+                        DropdownMenuItem(value: m, child: Text('$m menit'))).toList(),
+                    onChanged: (v) => setSheet(() => duration = v ?? 30),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('${questions.length} pertanyaan',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  OutlinedButton.icon(
+                    onPressed: addQuestion,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Tambah Soal'),
+                  ),
+                ]),
+                if (questions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...questions.asMap().entries.map((e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(children: [
+                      Text('${e.key + 1}. ', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Expanded(child: Text(e.value['question'] ?? '',
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13))),
+                      IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.danger),
+                          onPressed: () => setSheet(() => questions.removeAt(e.key))),
+                    ]),
+                  )),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: loading || questions.isEmpty ? null : () async {
+                      if (titleCtrl.text.trim().isEmpty) return;
+                      setSheet(() => loading = true);
+                      await FirebaseFirestore.instance.collection(FirebaseConstants.quizzes).add({
+                        'title':      titleCtrl.text.trim(),
+                        'mapel':      mapelCtrl.text.trim(),
+                        'class':      kelasCtrl.text.trim(),
+                        'duration':   duration,
+                        'questions':  questions,
+                        'created_by': uid,
+                        'created_at': DateTime.now(),
+                      });
+                      setSheet(() => loading = false);
+                      if (sheetCtx.mounted) {
+                        Navigator.pop(sheetCtx);
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                          content: Text('Kuis berhasil dibuat!'),
+                          backgroundColor: AppTheme.secondary,
+                        ));
+                      }
+                    },
+                    icon: loading
+                        ? const SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.publish),
+                    label: Text(loading ? 'Menyimpan...' : 'Publikasikan Kuis'),
+                  ),
+                ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _gradeSubmission(BuildContext ctx, String subId, Map<String, dynamic> data) {
@@ -650,23 +805,204 @@ class _StatistikTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.bar_chart, size: 56, color: AppTheme.textMuted),
-          SizedBox(height: 12),
-          Text('Statistik Nilai & Kehadiran', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          SizedBox(height: 8),
-          Text('Grafik distribusi nilai dan persentase\nkehadiran kelas Anda.',
-              textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textMuted)),
-          SizedBox(height: 20),
-          Text('Integrasikan dengan fl_chart package\nuntuk tampilan grafik lengkap.',
-              textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+          // Distribusi Nilai
+          const Text('Distribusi Nilai Siswa', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection(FirebaseConstants.submissions)
+                .where('status', isEqualTo: TugasStatus.sudahDinilai)
+                .snapshots(),
+            builder: (_, snap) {
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return AppCard(child: Center(
+                  child: Padding(padding: const EdgeInsets.all(20),
+                    child: Text('Belum ada nilai.', style: const TextStyle(color: AppTheme.textMuted)))));
+              }
+              final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
+              final avg = grades.fold<num>(0, (a, b) => a + b) / grades.length;
+              final atas90  = grades.where((g) => g >= 90).length;
+              final atas75  = grades.where((g) => g >= 75 && g < 90).length;
+              final atas60  = grades.where((g) => g >= 60 && g < 75).length;
+              final bawah60 = grades.where((g) => g < 60).length;
+
+              return Column(children: [
+                // Rata-rata card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.grade, color: Colors.white, size: 32),
+                    const SizedBox(width: 16),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Rata-rata Nilai', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(avg.toStringAsFixed(1),
+                          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
+                      Text('dari ${docs.length} penilaian',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    ]),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                // Grade distribution bars
+                AppCard(
+                  child: Column(children: [
+                    _GradeBar(label: 'A (≥90)', count: atas90, total: docs.length, color: AppTheme.secondary),
+                    const SizedBox(height: 8),
+                    _GradeBar(label: 'B (75-89)', count: atas75, total: docs.length, color: AppTheme.primary),
+                    const SizedBox(height: 8),
+                    _GradeBar(label: 'C (60-74)', count: atas60, total: docs.length, color: AppTheme.warning),
+                    const SizedBox(height: 8),
+                    _GradeBar(label: 'D (<60)', count: bawah60, total: docs.length, color: AppTheme.danger),
+                  ]),
+                ),
+              ]);
+            },
+          ),
+          const SizedBox(height: 20),
+
+          // Rekap Absensi
+          const Text('Rekap Absensi Kelas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
+                .where('teacher_id', isEqualTo: uid).snapshots(),
+            builder: (_, snap) {
+              final docs = snap.data?.docs ?? [];
+              final hadir = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
+              final alpha = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.alpha).length;
+              final izin  = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.izin).length;
+              final sakit = docs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.sakit).length;
+              final total = docs.length;
+              final persen = total > 0 ? (hadir / total * 100).toStringAsFixed(1) : '0.0';
+
+              return AppCard(
+                child: Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                    _AbsStat(label: 'Hadir', value: hadir, color: AppTheme.secondary),
+                    _AbsStat(label: 'Alpha', value: alpha, color: AppTheme.danger),
+                    _AbsStat(label: 'Izin',  value: izin,  color: AppTheme.warning),
+                    _AbsStat(label: 'Sakit', value: sakit, color: AppTheme.info),
+                  ]),
+                  const Divider(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('Tingkat Kehadiran', style: TextStyle(color: AppTheme.textSecondary)),
+                    Text('$persen%',
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.secondary)),
+                  ]),
+                ]),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+
+          // Kuis yang dibuat
+          const Text('Kuis Saya', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection(FirebaseConstants.quizzes)
+                .where('created_by', isEqualTo: uid)
+                .orderBy('created_at', descending: true)
+                .snapshots(),
+            builder: (_, snap) {
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return AppCard(child: Center(child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(children: [
+                    const Icon(Icons.quiz_outlined, size: 40, color: AppTheme.textMuted),
+                    const SizedBox(height: 8),
+                    const Text('Belum ada kuis.', style: TextStyle(color: AppTheme.textMuted)),
+                  ]),
+                )));
+              }
+              return Column(
+                children: docs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  final qCount = (data['questions'] as List?)?.length ?? 0;
+                  return AppCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.quiz, color: AppTheme.accent),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text('${data['mapel']} • Kelas ${data['class']} • $qCount soal',
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                      ])),
+                      // Lihat jawaban siswa
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
+                            .where('quiz_id', isEqualTo: d.id).snapshots(),
+                        builder: (_, aSnap) {
+                          final count = aSnap.data?.docs.length ?? 0;
+                          return StatusBadge(label: '$count siswa', color: AppTheme.primary);
+                        },
+                      ),
+                    ]),
+                  );
+                }).toList(),
+              );
+            },
+          ),
         ],
       ),
     );
   }
+}
+
+class _GradeBar extends StatelessWidget {
+  final String label;
+  final int count, total;
+  final Color color;
+  const _GradeBar({required this.label, required this.count, required this.total, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total > 0 ? count / total : 0.0;
+    return Row(children: [
+      SizedBox(width: 70, child: Text(label, style: const TextStyle(fontSize: 12))),
+      Expanded(
+        child: Stack(children: [
+          Container(height: 18, decoration: BoxDecoration(
+              color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4))),
+          FractionallySizedBox(
+            widthFactor: ratio,
+            child: Container(height: 18, decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(4))),
+          ),
+        ]),
+      ),
+      const SizedBox(width: 8),
+      Text('$count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+    ]);
+  }
+}
+
+class _AbsStat extends StatelessWidget {
+  final String label; final int value; final Color color;
+  const _AbsStat({required this.label, required this.value, required this.color});
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    Text('$value', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+    Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+  ]);
 }
 
 // ─── HELPERS ───

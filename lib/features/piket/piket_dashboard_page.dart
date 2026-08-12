@@ -126,7 +126,11 @@ class _PiketHomeTab extends StatelessWidget {
                 icon: Icons.qr_code_scanner,
                 label: 'Scan QR\nSiswa',
                 color: AppTheme.secondary,
-                onTap: () {/* switch to tab 1 */},
+                onTap: () {
+                  // Navigate to Scan QR tab (index 1)
+                  final state = context.findAncestorStateOfType<_PiketDashboardPageState>();
+                  state?.setState(() => state._tab = 1);
+                },
               )),
               const SizedBox(width: 10),
               Expanded(child: _ActionCard(

@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../shared/chat_room_page.dart';
 import '../shared/notification_list_page.dart';
 import 'assignment_view.dart';
+import 'quiz_page.dart';
 
 class StudentDashboardPage extends StatefulWidget {
   const StudentDashboardPage({super.key});
@@ -56,6 +57,8 @@ class _StudentDashboardPageState extends State<StudentDashboardPage> {
       _HomeTab(uid: _uid, name: name, kelas: kelas),
       _MateriTab(kelas: kelas),
       _TugasTab(uid: _uid, kelas: kelas),
+      _KuisTab(uid: _uid, kelas: kelas),
+      _NilaiTab(uid: _uid),
       _JadwalTab(kelas: kelas),
       _AbsensiTab(uid: _uid),
     ];
@@ -90,11 +93,13 @@ class _StudentDashboardPageState extends State<StudentDashboardPage> {
         currentIndex: _tab,
         onTap: (i) => setState(() => _tab = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined),    activeIcon: Icon(Icons.home),    label: 'Beranda'),
-          BottomNavigationBarItem(icon: Icon(Icons.book_outlined),    activeIcon: Icon(Icons.book),    label: 'Materi'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), activeIcon: Icon(Icons.assignment), label: 'Tugas'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: 'Jadwal'),
-          BottomNavigationBarItem(icon: Icon(Icons.how_to_reg_outlined), activeIcon: Icon(Icons.how_to_reg), label: 'Absensi'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined),         activeIcon: Icon(Icons.home),         label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(Icons.book_outlined),         activeIcon: Icon(Icons.book),         label: 'Materi'),
+          BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined),   activeIcon: Icon(Icons.assignment),   label: 'Tugas'),
+          BottomNavigationBarItem(icon: Icon(Icons.quiz_outlined),         activeIcon: Icon(Icons.quiz),         label: 'Kuis'),
+          BottomNavigationBarItem(icon: Icon(Icons.grade_outlined),        activeIcon: Icon(Icons.grade),        label: 'Nilai'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined),activeIcon: Icon(Icons.calendar_today),label: 'Jadwal'),
+          BottomNavigationBarItem(icon: Icon(Icons.how_to_reg_outlined),   activeIcon: Icon(Icons.how_to_reg),   label: 'Absensi'),
         ],
       ),
     );
@@ -147,20 +152,47 @@ class _HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Quick Stats
+          // Quick Stats — live dari Firestore
           const Text('Ringkasan', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _QuickStatCard(label: 'Tugas\nMenunggu', value: '3',
-                  color: AppTheme.warning, icon: Icons.assignment_late_outlined)),
-              const SizedBox(width: 10),
-              Expanded(child: _QuickStatCard(label: 'Nilai\nRata-rata', value: '85',
-                  color: AppTheme.secondary, icon: Icons.grade_outlined)),
-              const SizedBox(width: 10),
-              Expanded(child: _QuickStatCard(label: 'Kehadiran\nBulan Ini', value: '95%',
-                  color: AppTheme.primary, icon: Icons.how_to_reg_outlined)),
-            ],
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection(FirebaseConstants.assignments)
+                .where('class', isEqualTo: kelas).snapshots(),
+            builder: (_, aSnap) {
+              final pending = (aSnap.data?.docs ?? []).length;
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection(FirebaseConstants.submissions)
+                    .where('student_id', isEqualTo: uid)
+                    .where('status', isEqualTo: TugasStatus.sudahDinilai).snapshots(),
+                builder: (_, sSnap) {
+                  final graded = (sSnap.data?.docs ?? []);
+                  final avg = graded.isEmpty ? '-' :
+                      (graded.fold<num>(0, (s, d) => s + ((d.data() as Map)['grade'] as num? ?? 0)) / graded.length)
+                          .toStringAsFixed(0);
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection(FirebaseConstants.absences)
+                        .where('student_id', isEqualTo: uid).snapshots(),
+                    builder: (_, abSnap) {
+                      final abs = abSnap.data?.docs ?? [];
+                      final hadir = abs.where((d) => (d.data() as Map)['status'] == AbsensiStatus.hadir).length;
+                      final persen = abs.isEmpty ? '-' : '${(hadir / abs.length * 100).toStringAsFixed(0)}%';
+                      return Row(
+                        children: [
+                          Expanded(child: _QuickStatCard(label: 'Tugas\nAktif', value: '$pending',
+                              color: AppTheme.warning, icon: Icons.assignment_late_outlined)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _QuickStatCard(label: 'Nilai\nRata-rata', value: avg,
+                              color: AppTheme.secondary, icon: Icons.grade_outlined)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _QuickStatCard(label: 'Kehadiran', value: persen,
+                              color: AppTheme.primary, icon: Icons.how_to_reg_outlined)),
+                        ],
+                      );
+                    },
+                  );
+                },
+              );
+            },
           ),
           const SizedBox(height: 20),
 
@@ -183,13 +215,13 @@ class _HomeTab extends StatelessWidget {
                       MaterialPageRoute(builder: (_) => const ChatRoomPage(chatId: 'guru_mapel', title: 'Chat Guru')))),
               _FeatureCard(icon: Icons.psychology_outlined, label: 'Konseling\nBK',
                   color: const Color(0xFFEC4899),
-                  onTap: () {}),
+                  onTap: () => _showKonselingBooking(context, uid)),
               _FeatureCard(icon: Icons.warning_amber_outlined, label: 'Poin\nPelanggaran',
                   color: const Color(0xFFEF4444),
                   onTap: () => _showViolations(context, uid)),
               _FeatureCard(icon: Icons.campaign_outlined, label: 'Pengumuman',
                   color: const Color(0xFF10B981),
-                  onTap: () {}),
+                  onTap: () => _showAllAnnouncements(context)),
               _FeatureCard(icon: Icons.notifications_outlined, label: 'Notifikasi',
                   color: const Color(0xFF6366F1),
                   onTap: () => Navigator.push(context,
@@ -757,4 +789,350 @@ class _AbsensiStat extends StatelessWidget {
       ],
     );
   }
+}
+
+// ─── KUIS TAB ───
+class _KuisTab extends StatelessWidget {
+  final String uid, kelas;
+  const _KuisTab({required this.uid, required this.kelas});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection(FirebaseConstants.quizzes)
+          .where('class', isEqualTo: kelas)
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (_, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return const Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.quiz_outlined, size: 56, color: AppTheme.textMuted),
+              SizedBox(height: 12),
+              Text('Belum ada kuis.', style: TextStyle(color: AppTheme.textMuted)),
+            ],
+          ));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (_, i) {
+            final data = docs[i].data() as Map<String, dynamic>;
+            final duration = data['duration'] as int? ?? 30;
+            final questions = (data['questions'] as List?)?.length ?? 0;
+            return AppCard(
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => QuizPage(quizId: docs[i].id, quizData: data, studentId: uid))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    StatusBadge(label: data['mapel'] ?? '', color: AppTheme.accent),
+                    const Spacer(),
+                    StatusBadge(label: '$duration menit', color: AppTheme.warning),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text('$questions pertanyaan',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                  const SizedBox(height: 8),
+                  // Cek apakah sudah dikerjakan
+                  FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance.collection(FirebaseConstants.quizAnswers)
+                        .where('quiz_id', isEqualTo: docs[i].id)
+                        .where('student_id', isEqualTo: uid)
+                        .get(),
+                    builder: (_, aSnap) {
+                      final done = (aSnap.data?.docs.isNotEmpty ?? false);
+                      final score = done
+                          ? (aSnap.data!.docs.first.data() as Map)['score'] ?? '-'
+                          : null;
+                      return Row(children: [
+                        Icon(done ? Icons.check_circle : Icons.play_circle_outline,
+                            size: 16, color: done ? AppTheme.secondary : AppTheme.primary),
+                        const SizedBox(width: 6),
+                        Text(done ? 'Selesai — Nilai: $score' : 'Mulai Kuis',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600,
+                                color: done ? AppTheme.secondary : AppTheme.primary)),
+                      ]);
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ─── NILAI TAB ───
+class _NilaiTab extends StatelessWidget {
+  final String uid;
+  const _NilaiTab({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection(FirebaseConstants.submissions)
+          .where('student_id', isEqualTo: uid)
+          .where('status', isEqualTo: TugasStatus.sudahDinilai)
+          .orderBy('graded_at', descending: true)
+          .snapshots(),
+      builder: (_, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+
+        if (docs.isEmpty) {
+          return const Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.grade_outlined, size: 56, color: AppTheme.textMuted),
+              SizedBox(height: 12),
+              Text('Belum ada nilai.', style: TextStyle(color: AppTheme.textMuted)),
+              SizedBox(height: 4),
+              Text('Kerjakan dan kumpulkan tugas untuk\nmendapatkan nilai.',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                  textAlign: TextAlign.center),
+            ],
+          ));
+        }
+
+        final grades = docs.map((d) => (d.data() as Map)['grade'] as num? ?? 0).toList();
+        final avg = grades.fold<num>(0, (a, b) => a + b) / grades.length;
+        final avgColor = avg >= 75 ? AppTheme.secondary : avg >= 60 ? AppTheme.warning : AppTheme.danger;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // Rata-rata card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [avgColor, avgColor.withOpacity(0.7)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(children: [
+                  const Text('Rata-rata Nilai', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text(avg.toStringAsFixed(1),
+                      style: const TextStyle(color: Colors.white, fontSize: 52, fontWeight: FontWeight.w800)),
+                  Text('dari ${docs.length} penilaian',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              const Align(alignment: Alignment.centerLeft,
+                  child: Text('Riwayat Nilai', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+              const SizedBox(height: 8),
+              ...docs.map((d) {
+                final data = d.data() as Map<String, dynamic>;
+                final grade = data['grade'] as num? ?? 0;
+                final color = grade >= 75 ? AppTheme.secondary : grade >= 60 ? AppTheme.warning : AppTheme.danger;
+                return AppCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(children: [
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(
+                          color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                      child: Center(
+                        child: Text('$grade',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection(FirebaseConstants.assignments)
+                              .doc(data['assignment_id']).get(),
+                          builder: (_, aSnap) {
+                            final aData = aSnap.data?.data() as Map?;
+                            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(aData?['title'] ?? 'Tugas',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              if (aData?['mapel'] != null)
+                                Text(aData!['mapel'],
+                                    style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                            ]);
+                          },
+                        ),
+                        if ((data['feedback'] as String?)?.isNotEmpty == true) ...[
+                          const SizedBox(height: 4),
+                          Text('Catatan: ${data['feedback']}',
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                        ],
+                      ]),
+                    ),
+                    StatusBadge(
+                      label: grade >= 75 ? 'LULUS' : 'REMIDI',
+                      color: color,
+                    ),
+                  ]),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── HELPER FUNCTIONS ───
+void _showKonselingBooking(BuildContext context, String studentId) {
+  final topicCtrl = TextEditingController();
+  String category = 'AKADEMIK';
+  bool loading = false;
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (_) => StatefulBuilder(
+      builder: (ctx, setSheet) => Padding(
+        padding: EdgeInsets.only(
+          left: 24, right: 24, top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 16),
+          const Text('Ajukan Konseling BK',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: category,
+            decoration: const InputDecoration(labelText: 'Kategori Masalah'),
+            items: const [
+              DropdownMenuItem(value: 'AKADEMIK',    child: Text('Akademik')),
+              DropdownMenuItem(value: 'SOSIAL',      child: Text('Sosial')),
+              DropdownMenuItem(value: 'PRIBADI',     child: Text('Pribadi')),
+              DropdownMenuItem(value: 'KARIR',       child: Text('Karir')),
+              DropdownMenuItem(value: 'PELANGGARAN', child: Text('Pelanggaran')),
+            ],
+            onChanged: (v) => setSheet(() => category = v ?? 'AKADEMIK'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: topicCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Ceritakan masalah Anda *',
+              hintText: 'Tuliskan permasalahan yang ingin dikonsultasikan...',
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC4899)),
+              onPressed: loading ? null : () async {
+                if (topicCtrl.text.trim().isEmpty) return;
+                setSheet(() => loading = true);
+                await FirebaseFirestore.instance.collection(FirebaseConstants.counseling).add({
+                  'student_id': studentId,
+                  'category':   category,
+                  'description': topicCtrl.text.trim(),
+                  'status':    'PENDING',
+                  'created_at': DateTime.now(),
+                });
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Pengajuan konseling berhasil dikirim!'),
+                    backgroundColor: AppTheme.secondary,
+                  ));
+                }
+              },
+              child: loading
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Kirim Pengajuan'),
+            ),
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
+void _showAllAnnouncements(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (_) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      builder: (_, ctrl) => Column(children: [
+        const SizedBox(height: 12),
+        Container(width: 40, height: 4,
+            decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(height: 12),
+        const Text('Semua Pengumuman',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const Divider(),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection(FirebaseConstants.announcements)
+                .orderBy('created_at', descending: true)
+                .snapshots(),
+            builder: (_, snap) {
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) return const Center(
+                  child: Text('Belum ada pengumuman.', style: TextStyle(color: AppTheme.textMuted)));
+              return ListView.builder(
+                controller: ctrl,
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final data = docs[i].data() as Map<String, dynamic>;
+                  final ts = data['created_at'] as dynamic;
+                  String tgl = '';
+                  try { tgl = DateFormat('d MMM yyyy').format(ts.toDate()); } catch (_) {}
+                  return AppCard(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        StatusBadge(label: 'PENGUMUMAN', color: AppTheme.secondary),
+                        const Spacer(),
+                        Text(tgl, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                      ]),
+                      const SizedBox(height: 8),
+                      Text(data['title'] ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Text(data['body'] ?? '',
+                          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                    ]),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ]),
+    ),
+  );
 }
