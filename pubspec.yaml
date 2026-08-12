@@ -1,0 +1,57 @@
+name: edutech_smk
+description: LMS EduTech SMK — Aplikasi Mobile Learning Management System untuk SMK
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── Firebase Services ──
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.8
+  cloud_firestore: ^4.15.8
+  firebase_storage: ^11.6.9
+  firebase_messaging: ^14.7.19
+
+  # ── State Management ──
+  provider: ^6.1.2
+
+  # ── File & Media ──
+  image_picker: ^1.0.7
+  file_picker: ^6.1.1
+
+  # ── Notifications ──
+  flutter_local_notifications: ^17.0.0
+
+  # ── Charts ──
+  fl_chart: ^0.67.0
+  percent_indicator: ^4.2.3
+
+  # ── Utilities ──
+  intl: ^0.19.0
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.2.6
+  uuid: ^4.3.3
+  path: ^1.9.0
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  timeago: ^3.6.1
+
+  # ── UI ──
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
