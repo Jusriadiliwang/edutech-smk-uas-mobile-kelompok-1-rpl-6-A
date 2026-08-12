@@ -176,7 +176,6 @@ class _LoginPageState extends State<LoginPage> {
                             textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
                               labelText: 'Email',
-                              hintText: 'nama@sekolah.ac.id',
                               prefixIcon: Icon(Icons.email_outlined, size: 20),
                             ),
                             validator: (v) {
