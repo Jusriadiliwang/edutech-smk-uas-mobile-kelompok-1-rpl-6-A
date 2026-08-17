@@ -5,7 +5,16 @@
 
 Aplikasi LMS berbasis Flutter + Firebase untuk SMK, mendukung 6 role pengguna dengan fitur lengkap manajemen pembelajaran.
 
----
+## Anggota Kelompok
+
+| No | Nama | NIM | Kelas |
+|----|------|-----|-------|
+| 1  | JUSRIADI LIWANG | 105841117023  | RPL 6A |
+| 2  | HASRIANA | 105841107623  | RPL 6A |
+| 3  | ANDI NAIVA NOOR | 105841122223 | RPL 6A |
+| 4  | M ARFAN MAULANA IRWANSYAH | 105841122523  | RPL 6A |
+| 5  | GUSHRYANTO LIBELS| 105841118523| RPL 6A |
+
 
 ## Live Demo
 
