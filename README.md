@@ -22,7 +22,7 @@ Aplikasi LMS berbasis Flutter + Firebase untuk SMK, mendukung 6 role pengguna de
 |----------|-----|
 | Web App (Firebase Hosting) | [https://edutech-smk-app-71383.web.app](https://edutech-smk-app-71383.web.app) |
 | Firebase Console | [console.firebase.google.com](https://console.firebase.google.com/project/edutech-smk-app-71383) |
-| Link Youtube | : https://youtu.be/MvUt-6WpoSQ?feature=shared 
+| Link Youtube |  https://youtu.be/MvUt-6WpoSQ?feature=shared 
 
 ### Akun Demo
 
