@@ -1,6 +1,6 @@
 # EduTech SMK — Learning Management System
 
-> Tugas UAS Mobile Cross-Platform Development  
+> Tugas UAS Mobile And Cross-Platform Development  
 > Kelompok 1 — RPL 6-A
 
 Aplikasi LMS berbasis Flutter + Firebase untuk SMK, mendukung 6 role pengguna dengan fitur lengkap manajemen pembelajaran.
@@ -22,6 +22,7 @@ Aplikasi LMS berbasis Flutter + Firebase untuk SMK, mendukung 6 role pengguna de
 |----------|-----|
 | Web App (Firebase Hosting) | [https://edutech-smk-app-71383.web.app](https://edutech-smk-app-71383.web.app) |
 | Firebase Console | [console.firebase.google.com](https://console.firebase.google.com/project/edutech-smk-app-71383) |
+| Link Youtube | : https://youtu.be/MvUt-6WpoSQ?feature=shared 
 
 ### Akun Demo
 
@@ -279,5 +280,5 @@ lib/
 ## Tim Pengembang
 
 Kelompok 1 — RPL 6-A  
-Mata Kuliah: Mobile Cross-Platform Development  
+Mata Kuliah: Mobile And Cross-Platform Development  
 Universitas Muhammadiyah Makassar
